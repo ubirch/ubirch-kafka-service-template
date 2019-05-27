@@ -7,8 +7,9 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import com.ubirch.kafka.consumer.{ ConsumerRecordsController, ConsumerRunner, ProcessResult, Configs => ConsumerConfigs }
 import com.ubirch.kafka.producer.{ ProducerRunner, Configs => ProducerrConfigs }
+import com.ubirch.util.FutureHelper
 import org.apache.kafka.clients.consumer.{ ConsumerRecord, OffsetResetStrategy }
-import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.clients.producer.{ ProducerRecord, RecordMetadata }
 import org.apache.kafka.common.serialization.{ Deserializer, Serializer }
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -94,10 +95,13 @@ trait ExpressConsumer[K, V] extends ConsumerBasicConfigs[K, V] with Controller[K
 
 trait ExpressProducer[K, V] extends ProducerBasicConfigs[K, V] {
 
+  val futureHelper = new FutureHelper()
+
   lazy val production = ProducerRunner(producerConfigs, Some(keySerializer), Some(valueSerializer))
 
-  def send(topic: String, value: V) = {
-    production.getProducerOrCreate.send(new ProducerRecord[K, V](topic, value))
+  def send(topic: String, value: V): Future[RecordMetadata] = {
+    val javaFutureSend = production.getProducerOrCreate.send(new ProducerRecord[K, V](topic, value))
+    futureHelper.fromJavaFuture(javaFutureSend)
   }
 
 }
