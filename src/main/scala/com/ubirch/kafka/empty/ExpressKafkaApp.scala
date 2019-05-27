@@ -6,9 +6,10 @@ import java.util.concurrent.CountDownLatch
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import com.ubirch.kafka.consumer.{ ConsumerRecordsController, ConsumerRunner, ProcessResult, Configs => ConsumerConfigs }
-import com.ubirch.kafka.producer.{ StringProducer, Configs => ProducerrConfigs }
+import com.ubirch.kafka.producer.{ ProducerRunner, Configs => ProducerrConfigs }
 import org.apache.kafka.clients.consumer.{ ConsumerRecord, OffsetResetStrategy }
-import org.apache.kafka.common.serialization.Deserializer
+import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.serialization.{ Deserializer, Serializer }
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -39,9 +40,13 @@ trait ConsumerBasicConfigs[K, V] {
 
 }
 
-trait ProducerBasicConfigs {
+trait ProducerBasicConfigs[K, V] {
 
   def producerBootstrapServers: String
+
+  def keySerializer: Serializer[K]
+
+  def valueSerializer: Serializer[V]
 
   def producerConfigs = ProducerrConfigs(producerBootstrapServers)
 
@@ -87,8 +92,14 @@ trait ExpressConsumer[K, V] extends ConsumerBasicConfigs[K, V] with Controller[K
   }
 }
 
-trait ExpressProducer[K, V] extends ProducerBasicConfigs {
-  lazy val production = StringProducer(producerConfigs)
+trait ExpressProducer[K, V] extends ProducerBasicConfigs[K, V] {
+
+  lazy val production = ProducerRunner(producerConfigs, Some(keySerializer), Some(valueSerializer))
+
+  def send(topic: String, value: V) = {
+    production.getProducerOrCreate.send(new ProducerRecord[K, V](topic, value))
+  }
+
 }
 
 trait ExpressKafkaApp[K, V] extends ExpressConsumer[K, V] with ExpressProducer[K, V] with Config with LazyLogging {
